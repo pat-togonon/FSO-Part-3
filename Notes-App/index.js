@@ -34,50 +34,86 @@ app.get('/api/notes', (request, response) => {
   });
 });
 
-app.get('/api/notes/:id', (request, response) => {
+app.get('/api/notes/:id', (request, response, next) => {
   
-  Note.findById(request.params.id).then(note => {
+  Note.findById(request.params.id)
+  .then(note => {
+    if (note) {
     response.json(note);
+    } else {
+      response.status(404).json({ error: 'Note has already been deleted from server' }).end();
+    }
   })
+  .catch(error => next(error))
 });
 
-app.delete('/api/notes/:id', (request, response) => {
+//we don't have delete feature on frontend yet. But it's okay to test out via Postman
+app.delete('/api/notes/:id', (request, response, next) => {
   Note.findByIdAndDelete(request.params.id)
     .then(deletedNote => {
-      if (deletedNote) {
+     /* if (deletedNote) {
         response.json({ message: 'Note successfully deleted' });
       } else {
-        response.status(400).json({ error: 'Note has already been deleted from server'})
+        response.status(404).json({ error: 'Note has already been deleted from server'})
       }
+       
+*/
+    response.status(204).end()
     })
-    .catch(error => {
-      response.status(400).json({ error: "Can't delete the note right now. Please try again later" })
-    })
-  
+    .catch(error => next(error))
+     
 });
 
-app.post('/api/notes', (request, response) => {
+app.post('/api/notes', (request, response, next) => {
   
   const body = request.body;
-
-  if (!body.content) {
-    return response.status(400).json({
-      error: 'Content missing. Please enter your note'
-      });
-  };
 
   const note = new Note ({
     content: body.content,
     important: body.important || false,
   });
 
-  note.save().then(savedNote => {
+  note.save()
+   .then(savedNote => {
     response.json(savedNote);
   })
+    .catch(error => next(error))
 
 }); 
 
+app.put('/api/notes/:id', (request, response, next) => {
+  const { content, important} = request.body;
+
+  Note.findByIdAndUpdate(
+    request.params.id,
+    { content, important},
+    { new: true,
+      runValidators: true,
+      context: 'query'
+     })
+    .then(updatedNote => {      
+        response.json(updatedNote)
+    })
+    .catch(error => next(error));
+});
+
 app.use(unknownEndpoint);
+
+const errorHandler = (error, request, response, next) => {
+  console.error(error.name, error.message);
+
+  if (error.name === 'CastError') {
+    return response.status(400).send({ error: 'invalid or malformatted id' });
+  }  else if (error.name === 'ValidationError') {
+    return response.status(400).send({ error: error.message });
+  } else {
+    console.log('error is ', error.name, error.message);
+   // return response.status(400).send({ error: 'Notes need to have at least 5 characters' });
+  }
+  next(error);
+};
+
+app.use(errorHandler);
 
 // closing mongoose when app is terminated / exited
 
